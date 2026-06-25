@@ -32,6 +32,7 @@ jobs:
           sudo apt-get install -y ffmpeg
           pip install -q seleniumbase requests pyvirtualdisplay
 
+      # ========== 配置 Hysteria2 代理（可选） ==========
       - name: 配置代理
         env:
           HY2_URL: ${{ secrets.HY2_URL }}
@@ -70,14 +71,27 @@ jobs:
           # 请确保在 Settings → Secrets 中添加 PRIVATE_REPO_ACCESS_TOKEN（具有访问 gunqio/zhiyong 的权限）
           PRIVATE_TOKEN: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
         run: |
-          # 关键：仓库地址改为 https://github.com/gunqio/zhiyong.git
           REPO_URL="https://x-access-token:${PRIVATE_TOKEN}@github.com/gunqio/zhiyong.git"
           git clone "$REPO_URL" private-repo
-          # 复制 zhiyong.py 并重命名为 falixnodes.py
-          cp private-repo/zhiyong.py falixnodes.py
+          
+          # 调试：列出仓库文件结构（可根据需要删除）
+          echo "=== 仓库根目录文件列表 ==="
+          ls -la private-repo/
+          echo "=== 所有 .py 文件 ==="
+          find private-repo -name "*.py"
+          
+          # 复制脚本文件（假设文件名为 falixnodes.py；如果不是，请修改为实际名称）
+          if [ -f "private-repo/falixnodes.py" ]; then
+            cp private-repo/falixnodes.py falixnodes.py
+            echo "[INFO] 成功复制 falixnodes.py"
+          else
+            echo "[ERROR] 私有仓库中未找到 falixnodes.py，请检查文件名或路径"
+            exit 1
+          fi
+          
           rm -rf private-repo
-          echo "[INFO] 已成功拉取 gunqio/zhiyong 并将 zhiyong.py 重命名为 falixnodes.py"
 
+      # ========== 执行重启脚本 ==========
       - name: 执行重启脚本
         env:
           FALIX: ${{ secrets.FALIX }}
@@ -91,9 +105,9 @@ jobs:
           else
             echo "[INFO] 直连模式"
           fi
-          python falixnodes.py   # 执行重命名后的脚本
+          python falixnodes.py
 
-      # （可选）上传截图等步骤，按需取消注释
+      # ========== （可选）上传截图 ==========
       # - name: 上传截图
       #   if: always()
       #   uses: actions/upload-artifact@v4
@@ -103,7 +117,8 @@ jobs:
       #     retention-days: 7
       #     if-no-files-found: ignore
 
-      - name: 保活提交（不修改 workflow）
+      # ========== 保活提交（不修改 workflow） ==========
+      - name: 保活提交
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
@@ -120,6 +135,7 @@ jobs:
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           git push
 
+      # ========== 清理运行记录 ==========
       - name: 清理运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
