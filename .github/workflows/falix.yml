@@ -64,6 +64,20 @@ jobs:
           sleep 3
           echo "[INFO] 代理已启动"
 
+      # ========== 拉取私有仓库 gunqio/zhiyong ==========
+      - name: 克隆私有仓库
+        env:
+          # 请确保在 Settings → Secrets 中添加 PRIVATE_REPO_ACCESS_TOKEN（具有访问 gunqio/zhiyong 的权限）
+          PRIVATE_TOKEN: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
+        run: |
+          # 关键：仓库地址改为 https://github.com/gunqio/zhiyong.git
+          REPO_URL="https://x-access-token:${PRIVATE_TOKEN}@github.com/gunqio/zhiyong.git"
+          git clone "$REPO_URL" private-repo
+          # 复制 zhiyong.py 并重命名为 falixnodes.py
+          cp private-repo/zhiyong.py falixnodes.py
+          rm -rf private-repo
+          echo "[INFO] 已成功拉取 gunqio/zhiyong 并将 zhiyong.py 重命名为 falixnodes.py"
+
       - name: 执行重启脚本
         env:
           FALIX: ${{ secrets.FALIX }}
@@ -71,30 +85,28 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           HY2_URL: ${{ secrets.HY2_URL }}
         run: |
-          # 根据是否有 HY2_URL 设置代理
           if [ -n "$HY2_URL" ]; then
             export PROXY_SERVER="http://127.0.0.1:1080"
             echo "[INFO] 使用代理: $PROXY_SERVER"
           else
             echo "[INFO] 直连模式"
           fi
-          
-          python main.py
+          python falixnodes.py   # 执行重命名后的脚本
 
-#      - name: 上传截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: screenshots-${{ github.run_number }}
-#          path: output/falix/*.png
-#          retention-days: 7
-#          if-no-files-found: ignore
+      # （可选）上传截图等步骤，按需取消注释
+      # - name: 上传截图
+      #   if: always()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: screenshots-${{ github.run_number }}
+      #     path: output/falix/*.png
+      #     retention-days: 7
+      #     if-no-files-found: ignore
 
       - name: 保活提交（不修改 workflow）
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
-          # 创建/更新一个保活记录文件
           cat > .keepalive << EOF
           last_run: $(date -u +%Y-%m-%d_%H:%M:%S)_UTC
           next_cron: $(grep -oP "(?<=- cron: ')[^']+" .github/workflows/falix.yml)
@@ -107,7 +119,6 @@ jobs:
           
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           git push
-
 
       - name: 清理运行记录
         if: always()
