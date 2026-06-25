@@ -7,7 +7,7 @@ on:
         description: '指定邮箱（留空全部，多个用逗号）'
         required: false
   schedule:
-    - cron: '6 6 * * *'
+    - cron: '6 6 * * *'  # 每 6 小时执行一次
 
 jobs:
   restart:
@@ -21,6 +21,7 @@ jobs:
       - name: 拉取主仓库代码
         uses: actions/checkout@v4
 
+      # ---------- 使用 actions/checkout 拉取私有仓库 ----------
       - name: 拉取私有仓库 gunqio/zhiyong
         uses: actions/checkout@v4
         with:
@@ -40,6 +41,7 @@ jobs:
           sudo apt-get install -y ffmpeg
           pip install -q seleniumbase requests pyvirtualdisplay
 
+      # ---------- 可选代理 ----------
       - name: 配置代理（可选）
         env:
           HY2_URL: ${{ secrets.HY2_URL }}
@@ -86,22 +88,38 @@ jobs:
           fi
           python falixnodes.py
 
+      # ---------- 🖼️ 上传截图（启用） ----------
+      - name: 上传截图
+        if: always()  # 即使脚本失败也上传截图
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ github.run_number }}
+          path: output/falix/*.png
+          retention-days: 7          # 保留 7 天，可自行调整
+          if-no-files-found: ignore  # 无截图时不报错
+
+      # ---------- 保活提交（修复推送冲突） ----------
       - name: 保活提交
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
+          # 拉取远程最新更改，避免推送冲突
           git pull origin main --rebase || true
+          
           cat > .keepalive << EOF
           last_run: $(date -u +%Y-%m-%d_%H:%M:%S)_UTC
           next_cron: $(grep -oP "(?<=- cron: ')[^']+" .github/workflows/falix.yml)
           EOF
+          
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .keepalive
           git commit -m "🚀 auto: 保活 $(date -u +%Y-%m-%d)" || echo "无变更"
+          
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           git push
 
+      # ---------- 清理运行记录（保留最近 2 次） ----------
       - name: 清理运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
