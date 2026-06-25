@@ -7,7 +7,7 @@ on:
         description: '指定邮箱（留空全部，多个用逗号）'
         required: false
   schedule:
-    - cron: '6 6 * * *'  # 每 6 小时执行一次
+    - cron: '6 6 * * *'
 
 jobs:
   restart:
@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: gunqio/zhiyong
-          token: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}  # 需具有 repo 权限
+          token: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
           path: zhiyong
           fetch-depth: 1
 
@@ -68,11 +68,8 @@ jobs:
           sleep 3
           echo "[INFO] 代理已启动"
 
-      # ---------- 复制需要的脚本到根目录 ----------
       - name: 复制 falixnodes.py 到工作目录
-        run: |
-          cp zhiyong/falixnodes.py .
-          echo "[INFO] 已复制 falixnodes.py"
+        run: cp zhiyong/falixnodes.py .
 
       - name: 执行重启脚本
         env:
@@ -89,20 +86,11 @@ jobs:
           fi
           python falixnodes.py
 
-      # （可选）截图上传
-      # - name: 上传截图
-      #   if: always()
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: screenshots-${{ github.run_number }}
-      #     path: output/falix/*.png
-      #     retention-days: 7
-      #     if-no-files-found: ignore
-
       - name: 保活提交
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
+          git pull origin main --rebase || true
           cat > .keepalive << EOF
           last_run: $(date -u +%Y-%m-%d_%H:%M:%S)_UTC
           next_cron: $(grep -oP "(?<=- cron: ')[^']+" .github/workflows/falix.yml)
