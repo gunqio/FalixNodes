@@ -18,8 +18,16 @@ jobs:
       actions: write
 
     steps:
-      - name: 拉取代码
+      - name: 拉取主仓库代码
         uses: actions/checkout@v4
+
+      - name: 拉取私有仓库 gunqio/zhiyong
+        uses: actions/checkout@v4
+        with:
+          repository: gunqio/zhiyong
+          token: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}  # 需具有 repo 权限
+          path: zhiyong
+          fetch-depth: 1
 
       - name: 配置 Python
         uses: actions/setup-python@v5
@@ -32,8 +40,7 @@ jobs:
           sudo apt-get install -y ffmpeg
           pip install -q seleniumbase requests pyvirtualdisplay
 
-      # ========== 配置 Hysteria2 代理（可选） ==========
-      - name: 配置代理
+      - name: 配置代理（可选）
         env:
           HY2_URL: ${{ secrets.HY2_URL }}
         run: |
@@ -41,16 +48,13 @@ jobs:
             echo "[INFO] 无代理配置，使用直连模式"
             exit 0
           fi
-          
           echo "[INFO] 配置 Hysteria2 代理"
           wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
-          
           URL="${HY2_URL#hysteria2://}"
           PASSWORD="${URL%%@*}"
           SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
           SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
-          
           cat > hy2.yaml << EOF
           server: ${SERVER}
           auth: ${PASSWORD}
@@ -60,38 +64,16 @@ jobs:
           http:
             listen: 127.0.0.1:1080
           EOF
-          
           ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
           sleep 3
           echo "[INFO] 代理已启动"
 
-      # ========== 拉取私有仓库 gunqio/zhiyong ==========
-      - name: 克隆私有仓库
-        env:
-          # 请确保在 Settings → Secrets 中添加 PRIVATE_REPO_ACCESS_TOKEN（具有访问 gunqio/zhiyong 的权限）
-          PRIVATE_TOKEN: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
+      # ---------- 复制需要的脚本到根目录 ----------
+      - name: 复制 falixnodes.py 到工作目录
         run: |
-          REPO_URL="https://x-access-token:${PRIVATE_TOKEN}@github.com/gunqio/zhiyong.git"
-          git clone "$REPO_URL" private-repo
-          
-          # 调试：列出仓库文件结构（可根据需要删除）
-          echo "=== 仓库根目录文件列表 ==="
-          ls -la private-repo/
-          echo "=== 所有 .py 文件 ==="
-          find private-repo -name "*.py"
-          
-          # 复制脚本文件（假设文件名为 falixnodes.py；如果不是，请修改为实际名称）
-          if [ -f "private-repo/falixnodes.py" ]; then
-            cp private-repo/falixnodes.py falixnodes.py
-            echo "[INFO] 成功复制 falixnodes.py"
-          else
-            echo "[ERROR] 私有仓库中未找到 falixnodes.py，请检查文件名或路径"
-            exit 1
-          fi
-          
-          rm -rf private-repo
+          cp zhiyong/falixnodes.py .
+          echo "[INFO] 已复制 falixnodes.py"
 
-      # ========== 执行重启脚本 ==========
       - name: 执行重启脚本
         env:
           FALIX: ${{ secrets.FALIX }}
@@ -107,7 +89,7 @@ jobs:
           fi
           python falixnodes.py
 
-      # ========== （可选）上传截图 ==========
+      # （可选）截图上传
       # - name: 上传截图
       #   if: always()
       #   uses: actions/upload-artifact@v4
@@ -117,7 +99,6 @@ jobs:
       #     retention-days: 7
       #     if-no-files-found: ignore
 
-      # ========== 保活提交（不修改 workflow） ==========
       - name: 保活提交
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
@@ -126,16 +107,13 @@ jobs:
           last_run: $(date -u +%Y-%m-%d_%H:%M:%S)_UTC
           next_cron: $(grep -oP "(?<=- cron: ')[^']+" .github/workflows/falix.yml)
           EOF
-          
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .keepalive
           git commit -m "🚀 auto: 保活 $(date -u +%Y-%m-%d)" || echo "无变更"
-          
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           git push
 
-      # ========== 清理运行记录 ==========
       - name: 清理运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
